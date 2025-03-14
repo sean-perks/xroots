@@ -3,8 +3,8 @@
 ### Input Data Format
 The program expects a CSV file with the following columns:
 - `date_collected`: The date seeds were collected (format: YYYY-MM-DD)
-- `species`: The species name (e.g., Oak, Maple, Pine)
-- `amount_collected`: The number of seeds collected (integer)
+- `species`: The species USDA plant code (ACMIO, CHAN9..))
+- `amount_collected`: The lbs seeds collected (float)
 
 Alternatively, if no CSV is provided, random seed data will be generated.
 

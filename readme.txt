@@ -6,7 +6,7 @@ The program expects a CSV file with the following columns:
 - `species`: The species USDA plant code (ACMIO, CHAN9..))
 - `amount_collected`: The lbs seeds collected (float)
 
-Alternatively, if no CSV is provided, random seed data will be generated.
+Alternatively, if no CSV is provided, random seed data will be generated so the program can be tested
 
 ### Overview of Functionality
 - **`SeedDataProcessor`**: Loads data from a CSV or generates synthetic data. Allows filtering by species.

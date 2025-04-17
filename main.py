@@ -5,13 +5,26 @@ from scipy.optimize import curve_fit
 import pandas as pd
 
 class SeedDataProcessor:
-    def __init__(self, csv_path=None):
+    def __init__(self, csv_path=None, date_col=None):
         self.csv_path = csv_path
+        self.date_col = date_col
 
     def load_data(self, species=None):
         """Loads seed collection data from a CSV or generates fake data if no CSV is provided. Filters by species if specified."""
         if self.csv_path:
-            data = pd.read_csv(self.csv_path, parse_dates=["date_collected"])
+            if not self.date_col:
+                data = pd.read_csv(self.csv_path)
+                found = False
+                for c in data.columns:
+                    if "date" in c.lower():
+                        date_col = c
+                        data[date_col] = pd.to_datetime(data[date_col])
+                        found = True
+                        break
+                if not found:
+                    return None
+            else:
+                data = pd.read_csv(self.csv_path, parse_dates=self.date_col)
         else:
             data = self._generate_fake_data()
         
@@ -27,7 +40,7 @@ class SeedDataProcessor:
     def _generate_fake_data():
         """Generates fake seed collection data for testing."""
         species_list = ["Oak", "Maple", "Pine", "Birch", "Spruce"]
-        dates = pd.date_range(start="2010-01-01", periods=13, freq="YE")
+        dates = pd.date_range(start="2010-01-01", periods=13, freq="Y")
         data = {
             "date_collected": np.repeat(dates, len(species_list)),
             "species": np.tile(species_list, len(dates)),
@@ -44,20 +57,28 @@ class TrendAnalyzer:
 
     def fit_trends(self, ds):
         """Fits linear trends for each species in the dataset."""
-        species_trends = ds.groupby("species").sum()
         trends = {}
-        
-        for species in species_trends["amount_collected"].species.values:
-            time_series = species_trends.sel(species=species)["amount_collected"]
+
+        # Iterate over each species in the dataset
+        for species in ds.coords["species"].values:
+            # Select the time series for the current species
+            time_series = ds.sel(species=species)["amount_collected"]
+
+            # Ensure that time_series is not empty
+            if time_series.size == 0:
+                print(f"No data for species: {species}")
+                continue
+
+            # Create the x values (time in years)
             x = (time_series.time - np.datetime64("2010-01-01")) / np.timedelta64(1, "D")
             x = x / 365.25  # Convert days to years
             y = time_series.values
+
+            # Fit the linear trend
             params, _ = curve_fit(self.linear_trend, x, y)
             trends[species] = (x, y, params)
-        
+
         return trends
-
-
 
 class Plotter:
     def plot_trends(self, trends):
@@ -76,6 +97,7 @@ class Plotter:
         ax.legend()
         plt.xticks(rotation=45)
         plt.show()
+        print("Plot should be showing")
 
 if __name__ == "__main__":
     print("""
@@ -95,7 +117,7 @@ Xarray for Researching Organic Observations in Temporal Systems
         
         processor = SeedDataProcessor() 
         ds = processor.load_data()  # Filter by species (optional)
-        
+
         if choice == "1":
             print(f"/n{ds}/n")
             
@@ -108,29 +130,30 @@ Xarray for Researching Organic Observations in Temporal Systems
             """)
             
             choice = input("Enter 1 or 2: ")
-            if choice == 1:
+            if choice == "1":
+                print("choice 1")
                 analyzer = TrendAnalyzer()
                 trends = analyzer.fit_trends(ds)
         
                 plotter = Plotter()
                 plotter.plot_trends(trends)
-            elif choice == 2:
+            elif choice == "2":
                 species = ds.coords["species"]
-                
+
                 for i in range(len(species)):
-                    print(f"{i + 1}. {species[i]}")
-                
+                    print(f"{i + 1}. {species[i].item()}")
+
                 c = input("Enter the species: ")
                 try:
-                    ds = processor.load_data(species=species[int(i)])
+                    ds = processor.load_data(species=species[int(c) - 1])
                     analyzer = TrendAnalyzer()
                     trends = analyzer.fit_trends(ds)
-        
+
                     plotter = Plotter()
                     plotter.plot_trends(trends)
-                except:
+                except: #fixme
                     print("Wrong. FIXME add data validation")
-            
+
                 
         
         

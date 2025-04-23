@@ -5,35 +5,45 @@ from scipy.optimize import curve_fit
 import pandas as pd
 
 class SeedDataProcessor:
-    def __init__(self, csv_path=None, date_col=None):
+    def __init__(self, csv_path=None):
         self.csv_path = csv_path
-        self.date_col = date_col
 
-    def load_data(self, species=None):
+    def clean_df(self, df):
+        if ("species" not in df.columns or "date_collected" not in df.columns or "Available lb" not in df.columns):
+            print("CSV must contain columns named 'species', 'Available lb', and 'date_collected'.")
+            print("At least one is missing. Goodbye.")
+            exit()
+
+        keep = ["species", "date_collected", "Available lb"]
+        df = df[keep]
+        df = df.replace("", pd.NA)
+        df.dropna(inplace=True)
+        df["date_collected"] = pd.to_datetime(df["date_collected"], format='%d-%b-%y')
+        good = []
+        for s in df["species"]:
+            d = df[df["species"] == s]
+            if len(d) > 1:
+                good.append(s)
+        df = df[df["species"].isin(good)]
+        df = df.groupby(['date_collected', 'species'], as_index=False).agg({'Available lb': 'sum'})
+        return df
+
+    def load_data(self, species = None):
         """Loads seed collection data from a CSV or generates fake data if no CSV is provided. Filters by species if specified."""
         if self.csv_path:
-            if not self.date_col:
-                data = pd.read_csv(self.csv_path)
-                found = False
-                for c in data.columns:
-                    if "date" in c.lower():
-                        date_col = c
-                        data[date_col] = pd.to_datetime(data[date_col])
-                        found = True
-                        break
-                if not found:
-                    return None
-            else:
-                data = pd.read_csv(self.csv_path, parse_dates=self.date_col)
+            data = pd.read_csv(self.csv_path)
+            data = self.clean_df(data)
         else:
             data = self._generate_fake_data()
-        
+
         if species:
             data = data[data["species"] == species]
+
 
         ds = xr.Dataset.from_dataframe(
             data.set_index(["date_collected", "species"])
         ).rename({"date_collected": "time"})
+        ds = ds.fillna(0)
         return ds
 
     @staticmethod
@@ -44,7 +54,7 @@ class SeedDataProcessor:
         data = {
             "date_collected": np.repeat(dates, len(species_list)),
             "species": np.tile(species_list, len(dates)),
-            "amount_collected": np.random.randint(5, 30, size=len(dates) * len(species_list))
+            "Available lb": np.random.randint(5, 30, size=len(dates) * len(species_list))
         }
         return pd.DataFrame(data)
         
@@ -62,7 +72,7 @@ class TrendAnalyzer:
         # Iterate over each species in the dataset
         for species in ds.coords["species"].values:
             # Select the time series for the current species
-            time_series = ds.sel(species=species)["amount_collected"]
+            time_series = ds.sel(species=species)["Available lb"]
 
             # Ensure that time_series is not empty
             if time_series.size == 0:
@@ -73,7 +83,6 @@ class TrendAnalyzer:
             x = (time_series.time - np.datetime64("2010-01-01")) / np.timedelta64(1, "D")
             x = x / 365.25  # Convert days to years
             y = time_series.values
-
             # Fit the linear trend
             params, _ = curve_fit(self.linear_trend, x, y)
             trends[species] = (x, y, params)
@@ -92,7 +101,7 @@ class Plotter:
             ax.plot(x_fit_dates, y_fit, linestyle="--", label=f"{species} Trend")
         
         ax.set_xlabel("Year")
-        ax.set_ylabel("Total Amount Collected")
+        ax.set_ylabel("Total Available lb")
         ax.set_title("Seed Collection Trends Over Time")
         ax.legend()
         plt.xticks(rotation=45)
@@ -100,6 +109,8 @@ class Plotter:
         print("Plot should be showing")
 
 if __name__ == "__main__":
+
+
     print("""
                 Welcome to X.R.O.O.T.S
 Xarray for Researching Organic Observations in Temporal Systems
@@ -115,7 +126,7 @@ Xarray for Researching Organic Observations in Temporal Systems
     while choice != '3':
         choice = input("Select option 1 - 3: ")
         
-        processor = SeedDataProcessor() 
+        processor = SeedDataProcessor(r'data/rst_db_4172025.csv')
         ds = processor.load_data()  # Filter by species (optional)
 
         if choice == "1":
@@ -144,15 +155,14 @@ Xarray for Researching Organic Observations in Temporal Systems
                     print(f"{i + 1}. {species[i].item()}")
 
                 c = input("Enter the species: ")
-                try:
-                    ds = processor.load_data(species=species[int(c) - 1])
-                    analyzer = TrendAnalyzer()
-                    trends = analyzer.fit_trends(ds)
 
-                    plotter = Plotter()
-                    plotter.plot_trends(trends)
-                except: #fixme
-                    print("Wrong. FIXME add data validation")
+                ds = processor.load_data(species=species[int(c) - 1])
+                analyzer = TrendAnalyzer()
+                trends = analyzer.fit_trends(ds)
+
+                plotter = Plotter()
+                plotter.plot_trends(trends)
+
 
                 
         
